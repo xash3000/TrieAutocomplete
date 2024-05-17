@@ -1,58 +1,53 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Text;
+using System.Linq;
 
 namespace TrieAutocomplete;
 
-class Node
+class Dugum
 {
-    public Node[] children = new Node[29];
-    public bool isWordEnd = false;
+    public Dugum[] cocuklar = new Dugum[29];
+    public bool kelimeSonu = false;
 }
 
 class Trie
 {
-    Node root;
+    Dugum root;
 
     private static readonly char[] harfler =
     "abcçdefgğhıijklmnoöprsştuüvyz".ToCharArray();
 
-    // Create a dictionary to map each character to an index
     private static readonly Dictionary<char, int> harf_index = harfler
         .Select((c, i) => new { c, i })
         .ToDictionary(ci => ci.c, ci => ci.i);
 
     public Trie()
     {
-        root = new Node();
+        root = new Dugum();
     }
 
-    // If not present, inserts key into trie.  If the
-    // key is prefix of trie node, just marks leaf node
-    public void Insert(string key)
+    
+    public void Ekle(string kelime)
     {
-        Node pCrawl = root;
-        for (int i = 0; i < key.Length; i++)
+        Dugum temp = root;
+        for (int i = 0; i < kelime.Length; i++)
         {
-            //int index = key[i] - 'a';
-            int index = harf_index[key[i]];
-            if (pCrawl.children[index] == null)
+            int index = harf_index[kelime[i]];
+            if (temp.cocuklar[index] == null)
             {
-                pCrawl.children[index] = new Node();
+                temp.cocuklar[index] = new Dugum();
             }
-            pCrawl = pCrawl.children[index];
+            temp = temp.cocuklar[index];
         }
-        // mark last node as leaf
-        pCrawl.isWordEnd = true;
+        temp.kelimeSonu = true;
     }
 
-    // Returns 0 if current node has a child
-    // If all children are NULL, return 1.
-    bool IsLastNode(Node root)
+    bool SonDugum(Dugum root)
     {
         for (int i = 0; i < 29; i++)
         {
-            if (root.children[i] != null)
+            if (root.cocuklar[i] != null)
             {
                 return false;
             }
@@ -60,148 +55,218 @@ class Trie
         return true;
     }
 
-    // Recursive function to print auto-suggestions for given
-    // node.
-    void suggestionsRec(Node root, string currPrefix, ref int limit, ref List<string> suggestions)
+    void RecursiveOneriAl(Dugum root, string prefix, ref int limit, ref List<string> oneriler)
     {
         if (limit <= 0) return;
-        // found a string in Trie with the given prefix
-        if (root.isWordEnd)
+        
+        if (root.kelimeSonu)
         {
             limit--;
-            suggestions.Add(currPrefix);
+            oneriler.Add(prefix);
         }
         for (int i = 0; i < 29; i++)
         {
-            if (root.children[i] != null)
+            if (root.cocuklar[i] != null)
             {
-                // child node character value
                 char c = harfler[i];
-                suggestionsRec(root.children[i], currPrefix + c, ref limit, ref suggestions);
+                RecursiveOneriAl(root.cocuklar[i], prefix + c, ref limit, ref oneriler);
             }
         }
     }
 
-    // print suggestions for given query prefix.
-    public int printAutoSuggestions(string query, int limit, ref List<string> suggestions)
+    public int OneriAl(string sorgu, int limit, ref List<string> oneriler)
     {
-        Node pCrawl = root;
-        for (int i = 0; i < query.Length; i++)
+        Dugum temp = root;
+        for (int i = 0; i < sorgu.Length; i++)
         {
-            //int index = query[i] - 'a';
-            int index = harf_index[query[i]];
-            // no string in the Trie has this prefix
-            if (pCrawl.children[index] == null)
+            
+            int index = harf_index[sorgu[i]];
+            
+            if (temp.cocuklar[index] == null)
             {
                 return 0;
             }
-            pCrawl = pCrawl.children[index];
+            temp = temp.cocuklar[index];
         }
-        // If prefix is present as a word, but
-        // there is no subtree below the last
-        // matching node.
-        if (IsLastNode(pCrawl))
+       
+        if (SonDugum(temp))
         {
-            Console.WriteLine(query);
+            oneriler.Add(sorgu);
             return -1;
         }
-        suggestionsRec(pCrawl, query, ref limit, ref suggestions);
+        RecursiveOneriAl(temp, sorgu, ref limit, ref oneriler);
         return 1;
     }
 }
 
-// Driver Code
+
 class Program
 {
+
     static void Main(string[] args)
+    {
+        var metinTamamlama = new MetinTamamlama();
+        metinTamamlama.basla();
+    }
+}
+
+class MetinTamamlama
+{
+    private Trie trie = new Trie();
+    List<string> metin = new List<string>();
+    int metin_uzunlugu = 0;
+    List<string> oneriler = new List<string>();
+    string aktif_kelime = "";
+    Dictionary<string, int> frekans = new Dictionary<string, int>();
+
+    public void basla()
     {
         Console.OutputEncoding = Encoding.UTF8;
         Console.InputEncoding = Encoding.UTF8;
 
-        Trie trie = new Trie();
-        Console.WriteLine("Otomatik metin tamamlama uygulaması");
-        Console.WriteLine("3 milyon kelime trie veri yapısına ekleniyor, lüften bekleyiniz...");
-        string filePath = "words.txt";
-        using (StreamReader reader = new StreamReader(filePath, Encoding.GetEncoding("utf-8")))
+        KelimelerDosyasiOku();
+        FrekansTablosuOku();
+        Console.Clear();
+        Console.WriteLine("Metini yazın, bir öneriyi secmek için ilgili numarayı basın");
+        YazmayaBasla();
+    }
+
+    private void KelimelerDosyasiOku()
+    {
+        string dosya = "words.txt";
+        int kelimeSayisi = 0;
+        
+        using (StreamReader reader = new StreamReader(dosya, Encoding.GetEncoding("utf-8")))
         {
-            string line;
+            string satir;
 
-            while ((line = reader.ReadLine()) != null)
+            while ((satir = reader.ReadLine()) != null)
             {
-                if (string.IsNullOrWhiteSpace(line)) continue;
-                string[] words = line.Split(' ');
-
-                foreach (string word in words)
+                if (kelimeSayisi % 100000 == 0)
                 {
-                    trie.Insert(word);
+                    Console.Clear();
+                    Console.WriteLine("Otomatik metin tamamlama uygulaması");
+                    Console.WriteLine("3.2 milyon kelime trie veri yapısına ekleniyor, lüften bekleyiniz...");
+                    Console.WriteLine($"{(int)(kelimeSayisi/3284900.0f * 100)}% eklendi");
                 }
+                trie.Ekle(satir.Replace("\n", ""));
+                kelimeSayisi++;
             }
         }
+    }
+    private void FrekansTablosuOku()
+    {
+        int kelimeSayisi = 0;
+        using (StreamReader reader = new StreamReader("frekanslar.txt"))
+        {
+            string satir;
+            while ((satir = reader.ReadLine()) != null)
+            {
+                if (kelimeSayisi % 100000 == 0)
+                {
+                    Console.Clear();
+                    Console.WriteLine("Otomatik metin tamamlama uygulaması");
+                    Console.WriteLine("3.2 milyon kelime karma tablosuna ekleniyor, lüften bekleyiniz...");
+                    Console.WriteLine($"{(int)(kelimeSayisi / 2035629.0f * 100)}% eklendi");
+                }
+                string[] dizi = satir.Split(' ');
 
-        List<string> inputText = new List<string>();
-        int text_length = 0;
-        List<string> suggestions = new List<string>();
-        string current_word = "";
+                string kelime = dizi[0];
+                int siklik = int.Parse(dizi[1]);
 
+                frekans.Add(kelime, siklik);
+                kelimeSayisi++;
+            }
+        }
+    }
+    private void YazmayaBasla()
+    {
         while (true)
         {
             char c = Console.ReadKey().KeyChar;
 
-            if (c == ' ' || c == '\n') {
-                current_word = "";
-                inputText.Add(" ");
-                inputText.Add("");
-                text_length++;
+            if (c == ' ' || c == '\n')
+            {
+                YineKelimeyeGec();
             }
             else
             {
-                if (c == (char)8) // backspace
-                {
-                    if(current_word.Length > 0)
-                    {
-                        current_word = current_word.Substring(0, current_word.Length - 1);
-                        text_length--;
-                    }
-                }else if (char.IsDigit(c)) // accepting suggestion
-                {
-                    suggestions.Clear();
-                    trie.printAutoSuggestions(current_word, 9, ref suggestions);
-                    int index = c - '0';
-                    if(suggestions.Count >= index && index > 0)
-                    {
-                        text_length += suggestions[index - 1].Length - current_word.Length;
-                        current_word = suggestions[index - 1];
-                    }
-                }
-                else
-                {
-                    current_word += c;
-                    text_length++;
-                }
-
-                if(inputText.Count > 0)
-                {
-                    inputText.RemoveAt(inputText.Count - 1);
-                }
-                inputText.Add(current_word);
-
-                // yazdir
-                Console.Clear();
-                Console.WriteLine("Metini yazın");
-                Console.WriteLine("Metini yazın, bir öneri almak için ilgili numarayı basın");
-                foreach (var str in inputText) Console.Write(str);
-                Console.WriteLine("\nÖneriler");
-
-                suggestions.Clear();
-
-                trie.printAutoSuggestions(current_word, 9, ref suggestions);
-
-                for(int i = 0; i < suggestions.Count; i++)
-                {
-                    Console.WriteLine($"{i + 1}. {suggestions[i]}");
-                }
-                Console.SetCursorPosition(text_length, 1);
+                IslemYap(c);
+                OnerileriYazdir();
             }
         }
+    }
+
+    private void YineKelimeyeGec()
+    {
+        aktif_kelime = "";
+        metin.Add(" ");
+        metin.Add("");
+        metin_uzunlugu++;
+    }
+
+    private void IslemYap(char c)
+    {
+        if (c == (char)8) // son harfı silmek
+        {
+            if (aktif_kelime.Length > 0)
+            {
+                aktif_kelime = aktif_kelime.Substring(0, aktif_kelime.Length - 1);
+                metin_uzunlugu--;
+            }
+        }
+        else if (char.IsDigit(c)) // öneri seçmek
+        {
+            int index = c - '0';
+            if (index > 0 && index <= 9)
+            {
+                try
+                {
+                    metin_uzunlugu += oneriler[index - 1].Length - aktif_kelime.Length;
+                    aktif_kelime = oneriler[index - 1];
+                }
+                catch (Exception ex)
+                {
+                    ;
+                }
+            }
+        }else
+        {
+            aktif_kelime += c;
+            metin_uzunlugu++;
+        }
+
+        if (metin.Count > 0)
+        {
+            metin.RemoveAt(metin.Count - 1);
+        }
+        metin.Add(aktif_kelime);
+    }
+
+    private void OnerileriYazdir()
+    {
+        Console.Clear();
+        Console.WriteLine("Metini yazın, bir öneriyi secmek için ilgili numarayı basın");
+        foreach (var str in metin) Console.Write(str);
+        Console.WriteLine("\nÖneriler");
+
+        oneriler.Clear();
+        trie.OneriAl(aktif_kelime, 10000, ref oneriler);
+
+        oneriler.Sort((k1, k2) =>
+        {
+            int frekans1 = frekans.ContainsKey(k1) ? frekans[k1] : 0;
+            int frekans2 = frekans.ContainsKey(k2) ? frekans[k2] : 0;
+            return frekans2.CompareTo(frekans1);
+        });
+
+        int oneri_sayisi = oneriler.Count;
+        if (oneri_sayisi > 10) oneri_sayisi = 10;
+        for (int i = 0; i < oneri_sayisi; i++)
+        {
+            Console.WriteLine($"{i + 1}. {oneriler[i]}");
+        }
+        if (oneriler.Count == 0) Console.WriteLine("Oneri bulunamadı");
+        Console.SetCursorPosition(metin_uzunlugu, 1);
     }
 }
